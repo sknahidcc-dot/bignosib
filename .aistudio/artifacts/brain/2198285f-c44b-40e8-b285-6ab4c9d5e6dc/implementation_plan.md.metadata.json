@@ -1,0 +1,6 @@
+{
+  "summary":  "Comprehensive architecture and implementation plan for BigNosib (বিগনসিব) – a modern, high-security lottery platform. Includes complete database schema with PostgreSQL/Supabase tables, Row Level Security, full-stack Vite + Express architecture, client views (Home, Buy Lottery, Live Draw/Results, Account with Ticket Download, Auth), and a dedicated Admin Panel (/np/error) with payment approval, draw execution, prize distribution (15% 1st, 15% 2nd, 20% 3rd, 50% internal company reserve), content control, and financial reporting.",
+  "updatedAt":  "2026-10-10T16:52:10.554687055Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

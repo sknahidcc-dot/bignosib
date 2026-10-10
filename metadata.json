@@ -1,0 +1,8 @@
+{
+  "name": "BigNosib - Digital Lottery Platform",
+  "description": "BigNosib is a high-security digital lottery platform featuring scheduled live draws, transparent prize pools, manual bKash/Nagad/USDT verification, and digital ticket downloads.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
