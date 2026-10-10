@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { User, Ticket as TicketIcon, Clock, CheckCircle2, XCircle, Camera, Save, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { User, Ticket as TicketIcon, Clock, CheckCircle2, XCircle, Camera, Save, AlertCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Ticket, TicketOrder, UserProfile } from '../types/lottery';
 import { AuthService } from '../lib/auth';
 import { TicketCard } from '../components/TicketCard';
@@ -32,6 +32,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tickets Wallet Search & Pagination (supports smooth handling of 2000+ tickets)
+  const [ticketSearch, setTicketSearch] = useState('');
+  const [ticketPage, setTicketPage] = useState(1);
+  const [ticketsPerPage, setTicketsPerPage] = useState(12);
 
   // Avatar upload handler (Max 200KB)
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,6 +99,20 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   const pendingOrders = userOrders.filter(o => o.status === 'pending');
   const approvedOrders = userOrders.filter(o => o.status === 'approved');
+
+  // Tickets memoized pagination & search
+  const filteredTickets = useMemo(() => {
+    if (!ticketSearch.trim()) return userTickets;
+    const q = ticketSearch.trim().toLowerCase();
+    return userTickets.filter(t => t.ticket_number.toLowerCase().includes(q));
+  }, [userTickets, ticketSearch]);
+
+  const totalTicketPages = Math.max(1, Math.ceil(filteredTickets.length / ticketsPerPage));
+  const safeTicketPage = Math.min(ticketPage, totalTicketPages);
+  const currentPagedTickets = useMemo(() => {
+    const start = (safeTicketPage - 1) * ticketsPerPage;
+    return filteredTickets.slice(start, start + ticketsPerPage);
+  }, [filteredTickets, safeTicketPage, ticketsPerPage]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
@@ -183,13 +202,20 @@ export const AccountView: React.FC<AccountViewProps> = ({
       {/* TAB 1: TICKETS WALLET & DOWNLOAD */}
       {activeTab === 'tickets' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white font-display">
-              Approved Draw Tickets
-            </h2>
-            <span className="text-xs text-slate-400 font-mono">
-              Total Valid Tickets: {userTickets.filter(t => t.status === 'valid').length}
-            </span>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-white font-display">
+                Approved Draw Tickets
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Each ticket has a unique serial number entered into the live draw.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono font-bold">
+                Total Valid Tickets: {userTickets.filter(t => t.status === 'valid').length}
+              </span>
+            </div>
           </div>
 
           {userTickets.length === 0 ? (
@@ -209,10 +235,87 @@ export const AccountView: React.FC<AccountViewProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {userTickets.map((tkt) => (
-                <TicketCard key={tkt.id} ticket={tkt} />
-              ))}
+            <div className="space-y-4">
+              {/* Search & Page Filter Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={ticketSearch}
+                    onChange={(e) => {
+                      setTicketSearch(e.target.value);
+                      setTicketPage(1);
+                    }}
+                    placeholder="Search ticket # (e.g. BN-2026)..."
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end text-xs text-slate-400">
+                  <span className="font-mono">
+                    Showing {filteredTickets.length > 0 ? (safeTicketPage - 1) * ticketsPerPage + 1 : 0}-
+                    {Math.min(safeTicketPage * ticketsPerPage, filteredTickets.length)} of {filteredTickets.length}
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-slate-500">Per page:</span>
+                    <select
+                      value={ticketsPerPage}
+                      onChange={(e) => {
+                        setTicketsPerPage(Number(e.target.value));
+                        setTicketPage(1);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tickets Grid */}
+              {currentPagedTickets.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400 rounded-2xl bg-slate-900/40 border border-slate-800">
+                  No tickets match your search &quot;{ticketSearch}&quot;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {currentPagedTickets.map((tkt) => (
+                    <TicketCard key={tkt.id} ticket={tkt} />
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination Controls */}
+              {totalTicketPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
+                  <button
+                    onClick={() => setTicketPage(p => Math.max(1, p - 1))}
+                    disabled={safeTicketPage === 1}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40 disabled:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Previous
+                  </button>
+
+                  <div className="text-xs font-mono text-slate-400">
+                    Page <span className="text-white font-bold">{safeTicketPage}</span> of <span className="text-white font-bold">{totalTicketPages}</span>
+                  </div>
+
+                  <button
+                    onClick={() => setTicketPage(p => Math.min(totalTicketPages, p + 1))}
+                    disabled={safeTicketPage === totalTicketPages}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40 disabled:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    Next
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -329,17 +329,18 @@ export class LotteryStore {
     };
 
     const currentTickets = this.getTickets();
+    const existingTicketNumbers = new Set(currentTickets.map(t => t.ticket_number));
     const createdTickets: Ticket[] = [];
     const currentYear = new Date().getFullYear();
 
     for (let i = 0; i < newOrder.quantity; i++) {
       let uniqueNum = '';
-      let isUnique = false;
-      while (!isUnique) {
+      while (true) {
         const rand = Math.floor(100000 + Math.random() * 900000);
         uniqueNum = `BN-${currentYear}-${rand}`;
-        if (!currentTickets.some(t => t.ticket_number === uniqueNum) && !createdTickets.some(t => t.ticket_number === uniqueNum)) {
-          isUnique = true;
+        if (!existingTicketNumbers.has(uniqueNum)) {
+          existingTicketNumbers.add(uniqueNum);
+          break;
         }
       }
 
@@ -400,17 +401,18 @@ export class LotteryStore {
     }
 
     const currentTickets = this.getTickets();
+    const existingTicketNumbers = new Set(currentTickets.map(t => t.ticket_number));
     const createdTickets: Ticket[] = [];
     const currentYear = new Date().getFullYear();
 
     for (let i = 0; i < order.quantity; i++) {
       let uniqueNum = '';
-      let isUnique = false;
-      while (!isUnique) {
+      while (true) {
         const rand = Math.floor(100000 + Math.random() * 900000);
         uniqueNum = `BN-${currentYear}-${rand}`;
-        if (!currentTickets.some(t => t.ticket_number === uniqueNum) && !createdTickets.some(t => t.ticket_number === uniqueNum)) {
-          isUnique = true;
+        if (!existingTicketNumbers.has(uniqueNum)) {
+          existingTicketNumbers.add(uniqueNum);
+          break;
         }
       }
 
