@@ -17,8 +17,10 @@ import {
   Filter,
   Save,
   Play,
-  Shuffle,
-  Users
+  Users,
+  Gift,
+  Check,
+  Search
 } from 'lucide-react';
 import { Draw, DrawWinner, SystemSettings, TicketOrder } from '../types/lottery';
 import { AuthService } from '../lib/auth';
@@ -49,7 +51,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Active Admin Tab
-  const [activeTab, setActiveTab] = useState<'orders' | 'draw' | 'settings' | 'reports'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'draw' | 'payouts' | 'settings' | 'reports'>('orders');
+
+  // Payouts Tab Filter & Search
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  const [payoutSearchQuery, setPayoutSearchQuery] = useState('');
+  const [payoutFeedback, setPayoutFeedback] = useState<string | null>(null);
 
   // Orders Tab Filter & Search
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
@@ -154,6 +161,36 @@ export const AdminView: React.FC<AdminViewProps> = ({
       }
     }, 600);
   };
+
+  // Handle Mark Winner Paid
+  const handleMarkWinnerPaid = (winnerIdOrTicket: string) => {
+    const res = LotteryStore.markWinnerPaid(winnerIdOrTicket, 'Disbursed by Admin');
+    if (res.success) {
+      setPayoutFeedback('Winner prize marked as PAID! User profile alert will now be cleared.');
+      onRefreshData();
+      setTimeout(() => setPayoutFeedback(null), 4000);
+    }
+  };
+
+  // Filter Winners for Payouts
+  const filteredWinners = winners.filter((w) => {
+    const isPaid = w.payout_status === 'paid';
+    const matchStatus =
+      payoutStatusFilter === 'all'
+        ? true
+        : payoutStatusFilter === 'paid'
+        ? isPaid
+        : !isPaid;
+    const q = payoutSearchQuery.toLowerCase();
+    const matchSearch =
+      !q ||
+      w.ticket_number.toLowerCase().includes(q) ||
+      w.full_name.toLowerCase().includes(q) ||
+      w.masked_phone.includes(q);
+    return matchStatus && matchSearch;
+  });
+
+  const pendingPayoutCount = winners.filter((w) => w.payout_status !== 'paid').length;
 
   // Filter Orders
   const filteredOrders = orders.filter((o) => {
@@ -312,7 +349,22 @@ export const AdminView: React.FC<AdminViewProps> = ({
           }`}
         >
           <Trophy className="w-4 h-4" />
-          <span>Draw Execution & Winners</span>
+          <span>Draw Execution</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('payouts')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'payouts'
+              ? 'bg-amber-400 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <Gift className="w-4 h-4" />
+          <span>Prize Payouts ({pendingPayoutCount} Pending)</span>
+          {pendingPayoutCount > 0 && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          )}
         </button>
 
         <button
@@ -606,6 +658,190 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2.5 PRIZE PAYOUTS TAB */}
+      {activeTab === 'payouts' && (
+        <div className="space-y-6">
+          {payoutFeedback && (
+            <div className="p-4 rounded-xl text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{payoutFeedback}</span>
+            </div>
+          )}
+
+          {/* Top Info Banner */}
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2.5">
+            <Gift className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Prize Disbursement Control:</strong> যখন কোনো ইউজার লটারি জেতে, সে পেমেন্ট পাওয়ার আগ পর্যন্ত তার প্রোফাইলে উইনার ব্যানার দেখতে পারে। আপনি নিচে <strong>&quot;Mark as Paid&quot;</strong> বাটনে ক্লিক করলে উক্ত ইউজারের প্রোফাইল থেকে নোটিফিকেশনটি স্বয়ংক্রিয়ভাবে মুছে যাবে।
+            </span>
+          </div>
+
+          {/* KPI Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-amber-500/40">
+              <span className="text-xs text-slate-400 font-medium">Pending Payouts</span>
+              <div className="text-2xl font-black text-amber-400 font-mono mt-1">
+                {pendingPayoutCount} Winners
+              </div>
+              <div className="text-xs text-amber-300 font-mono mt-1">
+                Total ৳{winners.filter(w => w.payout_status !== 'paid').reduce((s, w) => s + w.prize_amount, 0).toLocaleString()}
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-emerald-500/30">
+              <span className="text-xs text-slate-400 font-medium">Paid & Cleared</span>
+              <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
+                {winners.filter(w => w.payout_status === 'paid').length} Winners
+              </div>
+              <div className="text-xs text-emerald-400 font-mono mt-1">
+                Total ৳{winners.filter(w => w.payout_status === 'paid').reduce((s, w) => s + w.prize_amount, 0).toLocaleString()}
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
+              <span className="text-xs text-slate-400 font-medium">Total Lifetime Winners</span>
+              <div className="text-2xl font-black text-white font-mono mt-1">
+                {winners.length} Winners
+              </div>
+              <div className="text-xs text-slate-400 font-mono mt-1">
+                All completed draws
+              </div>
+            </div>
+          </div>
+
+          {/* Filters & Search */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setPayoutStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  payoutStatusFilter === 'all'
+                    ? 'bg-slate-800 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All Winners ({winners.length})
+              </button>
+              <button
+                onClick={() => setPayoutStatusFilter('pending')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  payoutStatusFilter === 'pending'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                    : 'text-slate-400 hover:text-amber-400'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                Pending ({pendingPayoutCount})
+              </button>
+              <button
+                onClick={() => setPayoutStatusFilter('paid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  payoutStatusFilter === 'paid'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    : 'text-slate-400 hover:text-emerald-400'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                Paid ({winners.filter(w => w.payout_status === 'paid').length})
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={payoutSearchQuery}
+                onChange={(e) => setPayoutSearchQuery(e.target.value)}
+                placeholder="Search ticket #, name, phone..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Winners List Table */}
+          {filteredWinners.length === 0 ? (
+            <div className="p-12 text-center text-xs text-slate-400 rounded-2xl bg-slate-900/40 border border-slate-800">
+              No winners match the filter criteria.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-900/50">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="text-slate-400 bg-slate-950/80 border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Draw #</th>
+                      <th className="p-3.5">Winner Name & Phone</th>
+                      <th className="p-3.5">Ticket Number</th>
+                      <th className="p-3.5">Prize Tier</th>
+                      <th className="p-3.5">Prize Amount</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Disbursement Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-mono">
+                    {filteredWinners.map((w) => {
+                      const isPaid = w.payout_status === 'paid';
+                      return (
+                        <tr key={w.id} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="p-3.5 font-bold text-white">#{w.draw_number}</td>
+                          <td className="p-3.5 font-sans">
+                            <div className="font-bold text-white">{w.full_name}</div>
+                            <div className="text-[11px] text-slate-400 font-mono">{w.masked_phone}</div>
+                          </td>
+                          <td className="p-3.5 font-bold text-amber-300">{w.ticket_number}</td>
+                          <td className="p-3.5 font-sans">
+                            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                              w.prize_tier === '1st'
+                                ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                                : w.prize_tier === '2nd'
+                                ? 'bg-slate-200/20 text-slate-200 border border-slate-400/30'
+                                : 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30'
+                            }`}>
+                              {w.prize_tier} Prize
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-bold text-emerald-400 text-sm">
+                            ৳{w.prize_amount.toLocaleString()}
+                          </td>
+                          <td className="p-3.5 font-sans">
+                            {isPaid ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold">
+                                <Check className="w-3 h-3" />
+                                Paid
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[11px] font-semibold animate-pulse">
+                                <Clock className="w-3 h-3" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3.5 text-right font-sans">
+                            {isPaid ? (
+                              <span className="text-[11px] text-slate-500">
+                                Disbursed {w.paid_at ? new Date(w.paid_at).toLocaleDateString() : ''}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleMarkWinnerPaid(w.id)}
+                                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Mark as Paid (৳{w.prize_amount.toLocaleString()})</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

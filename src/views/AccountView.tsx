@@ -1,5 +1,22 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { User, Ticket as TicketIcon, Clock, CheckCircle2, XCircle, Camera, Save, AlertCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import {
+  User,
+  Ticket as TicketIcon,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Camera,
+  Save,
+  AlertCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Trophy,
+  Sparkles,
+  Gift,
+  Check
+} from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { Ticket, TicketOrder, UserProfile } from '../types/lottery';
 import { AuthService } from '../lib/auth';
 import { TicketCard } from '../components/TicketCard';
@@ -100,12 +117,52 @@ export const AccountView: React.FC<AccountViewProps> = ({
   const pendingOrders = userOrders.filter(o => o.status === 'pending');
   const approvedOrders = userOrders.filter(o => o.status === 'approved');
 
+  // Tickets sub-filter: 'all' | 'live' | 'expired'
+  const [ticketFilter, setTicketFilter] = useState<'all' | 'live' | 'expired'>('all');
+
+  // Pending winning tickets that have NOT yet been marked paid by admin
+  const pendingWinningTickets = useMemo(() => {
+    return userTickets.filter(t => t.is_winner && t.payout_status !== 'paid');
+  }, [userTickets]);
+
+  const totalUnpaidPrizeAmount = useMemo(() => {
+    return pendingWinningTickets.reduce((sum, t) => sum + (t.prize_amount || 0), 0);
+  }, [pendingWinningTickets]);
+
+  // Live vs Expired separation
+  const liveTickets = useMemo(() => {
+    return userTickets.filter(t => t.status === 'valid');
+  }, [userTickets]);
+
+  const expiredTickets = useMemo(() => {
+    return userTickets.filter(t => t.status === 'expired');
+  }, [userTickets]);
+
+  // Trigger celebratory confetti if user has won an unpaid prize
+  useEffect(() => {
+    if (pendingWinningTickets.length > 0) {
+      confetti({
+        particleCount: 80,
+        spread: 80,
+        origin: { y: 0.4 },
+        colors: ['#F59E0B', '#10B981', '#F43F5E', '#3B82F6', '#FBBF24'],
+      });
+    }
+  }, [pendingWinningTickets.length]);
+
   // Tickets memoized pagination & search
   const filteredTickets = useMemo(() => {
-    if (!ticketSearch.trim()) return userTickets;
+    let list = userTickets;
+    if (ticketFilter === 'live') {
+      list = liveTickets;
+    } else if (ticketFilter === 'expired') {
+      list = expiredTickets;
+    }
+
+    if (!ticketSearch.trim()) return list;
     const q = ticketSearch.trim().toLowerCase();
-    return userTickets.filter(t => t.ticket_number.toLowerCase().includes(q));
-  }, [userTickets, ticketSearch]);
+    return list.filter(t => t.ticket_number.toLowerCase().includes(q));
+  }, [userTickets, liveTickets, expiredTickets, ticketFilter, ticketSearch]);
 
   const totalTicketPages = Math.max(1, Math.ceil(filteredTickets.length / ticketsPerPage));
   const safeTicketPage = Math.min(ticketPage, totalTicketPages);
@@ -156,6 +213,68 @@ export const AccountView: React.FC<AccountViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* 🏆 WINNER CELEBRATION & PENDING PAYOUT BANNER */}
+      {pendingWinningTickets.length > 0 && (
+        <div className="mb-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-amber-950/70 via-[#181E15] to-emerald-950/70 border-2 border-amber-400/90 shadow-[0_0_40px_rgba(245,158,11,0.25)] relative overflow-hidden">
+          {/* Subtle background glow */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg">
+                <Trophy className="w-4 h-4 text-slate-950 fill-current" />
+                <span>Winner Notification · আপনি বিজয়ী হয়েছেন!</span>
+              </div>
+
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white font-display flex items-center gap-2.5">
+                  <span>🎉 Congratulations, {currentUser.full_name}!</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  অভিনন্দন! BigNosib লটারিতে আপনার টিকিট পুরষ্কার জিতেছে। যতদিন না আপনি টাকা পাচ্ছেন ততদিন এই বার্তাটি আপনার প্রোফাইলে প্রদর্শিত থাকবে। এডমিন পেমেন্ট পরিশোধ করে দিলে এটি সম্পন্ন হয়ে চলে যাবে।
+                </p>
+              </div>
+
+              {/* Winning ticket chips */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {pendingWinningTickets.map((t) => (
+                  <div
+                    key={t.id}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-amber-400/60 flex items-center gap-2 text-xs shadow"
+                  >
+                    <span className="font-mono font-bold text-amber-300">{t.ticket_number}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-white font-semibold">{t.prize_tier} Prize</span>
+                    <span className="font-mono font-bold text-emerald-400">৳{t.prize_amount.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Total prize badge & payout status */}
+            <div className="w-full md:w-auto p-5 rounded-2xl bg-slate-900/90 border border-amber-400/50 text-center space-y-2 shrink-0">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                Total Unclaimed Prize
+              </span>
+              <div className="text-3xl sm:text-4xl font-black text-amber-400 font-mono">
+                ৳{totalUnpaidPrizeAmount.toLocaleString()}
+              </div>
+
+              <div className="pt-2 border-t border-slate-800">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-semibold animate-pulse">
+                  <Clock className="w-3.5 h-3.5" />
+                  Payout Status: Pending Disbursement
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1.5 max-w-[260px]">
+                  এডমিন আপনার মোবাইল নম্বরে ({currentUser.phone}) টাকা পাঠিয়ে দিলে এটি চলে যাবে।
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs Navigation */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-8">
@@ -208,12 +327,15 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 Approved Draw Tickets
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Each ticket has a unique serial number entered into the live draw.
+                লাইভ টিকিটগুলো চলতি ড্র-তে বৈধ এবং মেয়াদোত্তীর্ণ টিকিটগুলো লাল রঙে আলাদা প্রদর্শিত।
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono font-bold">
-                Total Valid Tickets: {userTickets.filter(t => t.status === 'valid').length}
+                🟢 Live Active: {liveTickets.length}
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-mono font-bold">
+                🔴 Expired: {expiredTickets.length}
               </span>
             </div>
           </div>
@@ -235,30 +357,73 @@ export const AccountView: React.FC<AccountViewProps> = ({
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Search & Page Filter Controls */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
-                <div className="relative w-full sm:w-72">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={ticketSearch}
-                    onChange={(e) => {
-                      setTicketSearch(e.target.value);
+            <div className="space-y-6">
+              {/* Category Filter Pills & Search */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => {
+                      setTicketFilter('all');
                       setTicketPage(1);
                     }}
-                    placeholder="Search ticket # (e.g. BN-2026)..."
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
-                  />
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      ticketFilter === 'all'
+                        ? 'bg-slate-800 text-white shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    All Tickets ({userTickets.length})
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setTicketFilter('live');
+                      setTicketPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      ticketFilter === 'live'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                        : 'text-slate-400 hover:text-emerald-400'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    Live Only ({liveTickets.length})
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setTicketFilter('expired');
+                      setTicketPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      ticketFilter === 'expired'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                        : 'text-slate-400 hover:text-rose-400'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    Expired ({expiredTickets.length})
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end text-xs text-slate-400">
-                  <span className="font-mono">
-                    Showing {filteredTickets.length > 0 ? (safeTicketPage - 1) * ticketsPerPage + 1 : 0}-
-                    {Math.min(safeTicketPage * ticketsPerPage, filteredTickets.length)} of {filteredTickets.length}
-                  </span>
+                {/* Search Bar & Per Page */}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={ticketSearch}
+                      onChange={(e) => {
+                        setTicketSearch(e.target.value);
+                        setTicketPage(1);
+                      }}
+                      placeholder="Search ticket # (BN-2026)..."
+                      className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
+                    />
+                  </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
                     <span className="text-[11px] text-slate-500">Per page:</span>
                     <select
                       value={ticketsPerPage}
@@ -277,10 +442,28 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 </div>
               </div>
 
+              {/* Notice banner when viewing Expired tickets */}
+              {ticketFilter === 'expired' && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>
+                    মেয়াদোত্তীর্ণ টিকিট: এই টিকিটগুলোর ড্র অনুষ্ঠিত হয়ে গেছে। এগুলো লাল বর্ডার ও হালকা ব্লার ডিজাইনে সংরক্ষিত।
+                  </span>
+                </div>
+              )}
+
               {/* Tickets Grid */}
               {currentPagedTickets.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400 rounded-2xl bg-slate-900/40 border border-slate-800">
-                  No tickets match your search &quot;{ticketSearch}&quot;.
+                <div className="p-10 text-center text-xs text-slate-400 rounded-2xl bg-slate-900/40 border border-slate-800 space-y-2">
+                  <p>No tickets match your search or filter.</p>
+                  {ticketFilter === 'live' && liveTickets.length === 0 && (
+                    <button
+                      onClick={() => onNavigate('lottery-buy')}
+                      className="mt-2 px-4 py-2 rounded-xl bg-emerald-400 text-slate-950 font-bold text-xs"
+                    >
+                      Buy Ticket for Current Draw (৳50)
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -294,7 +477,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
               {totalTicketPages > 1 && (
                 <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
                   <button
-                    onClick={() => setTicketPage(p => Math.max(1, p - 1))}
+                    onClick={() => setTicketPage((p) => Math.max(1, p - 1))}
                     disabled={safeTicketPage === 1}
                     className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40 disabled:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1 transition-colors"
                   >
@@ -303,11 +486,14 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   </button>
 
                   <div className="text-xs font-mono text-slate-400">
-                    Page <span className="text-white font-bold">{safeTicketPage}</span> of <span className="text-white font-bold">{totalTicketPages}</span>
+                    Page <span className="text-white font-bold">{safeTicketPage}</span> of{' '}
+                    <span className="text-white font-bold">{totalTicketPages}</span> (Showing{' '}
+                    {filteredTickets.length > 0 ? (safeTicketPage - 1) * ticketsPerPage + 1 : 0}-
+                    {Math.min(safeTicketPage * ticketsPerPage, filteredTickets.length)} of {filteredTickets.length})
                   </div>
 
                   <button
-                    onClick={() => setTicketPage(p => Math.min(totalTicketPages, p + 1))}
+                    onClick={() => setTicketPage((p) => Math.min(totalTicketPages, p + 1))}
                     disabled={safeTicketPage === totalTicketPages}
                     className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40 disabled:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1 transition-colors"
                   >

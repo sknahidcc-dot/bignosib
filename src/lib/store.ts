@@ -487,6 +487,61 @@ export class LotteryStore {
     return readStorage<DrawWinner[]>(STORAGE_KEYS.WINNERS, INITIAL_WINNERS);
   }
 
+  // Mark single winner/ticket prize as paid
+  static markWinnerPaid(identifier: string, note: string = 'Disbursed by Admin'): { success: boolean; message: string } {
+    const winners = this.getWinners();
+    let targetTicketNum = '';
+    
+    winners.forEach(w => {
+      if (w.id === identifier || w.ticket_number === identifier || w.ticket_id === identifier) {
+        w.payout_status = 'paid';
+        w.paid_at = new Date().toISOString();
+        w.payout_note = note;
+        targetTicketNum = w.ticket_number;
+      }
+    });
+    writeStorage(STORAGE_KEYS.WINNERS, winners);
+
+    const tickets = this.getTickets();
+    tickets.forEach(t => {
+      if (t.id === identifier || t.ticket_number === identifier || (targetTicketNum && t.ticket_number === targetTicketNum)) {
+        t.payout_status = 'paid';
+        t.paid_at = new Date().toISOString();
+        t.payout_note = note;
+      }
+    });
+    writeStorage(STORAGE_KEYS.TICKETS, tickets);
+
+    return { success: true, message: 'Prize payout marked as Paid.' };
+  }
+
+  // Mark all pending prizes for a user as paid
+  static markAllUserPrizesPaid(userId: string, note: string = 'Disbursed by Admin'): { success: boolean; count: number } {
+    const winners = this.getWinners();
+    let count = 0;
+    winners.forEach(w => {
+      if (w.user_id === userId && w.payout_status !== 'paid') {
+        w.payout_status = 'paid';
+        w.paid_at = new Date().toISOString();
+        w.payout_note = note;
+        count++;
+      }
+    });
+    writeStorage(STORAGE_KEYS.WINNERS, winners);
+
+    const tickets = this.getTickets();
+    tickets.forEach(t => {
+      if (t.user_id === userId && t.is_winner && t.payout_status !== 'paid') {
+        t.payout_status = 'paid';
+        t.paid_at = new Date().toISOString();
+        t.payout_note = note;
+      }
+    });
+    writeStorage(STORAGE_KEYS.TICKETS, tickets);
+
+    return { success: true, count };
+  }
+
   // Execute Draw (Random or Manual)
   static executeDraw(manualTicketNumbers?: { first?: string[]; second?: string[]; third?: string[] }): {
     success: boolean;
@@ -538,6 +593,11 @@ export class LotteryStore {
           buyer_name: 'Verified Winner',
           buyer_phone: '01712*****',
         };
+        tkt.is_winner = true;
+        tkt.prize_tier = '1st';
+        tkt.prize_amount = firstPrize;
+        tkt.payout_status = 'pending';
+
         winningTicketNumbers.first.push(num);
         newWinners.push({
           id: `win-${Date.now()}-1`,
@@ -548,6 +608,7 @@ export class LotteryStore {
           user_id: tkt.user_id,
           prize_tier: '1st',
           prize_amount: firstPrize,
+          payout_status: 'pending',
           masked_phone: maskPhone(tkt.buyer_phone || '0171200000'),
           masked_email: 'wi***@bignosib.com',
           full_name: tkt.buyer_name || 'Jackpot Winner',
@@ -560,6 +621,7 @@ export class LotteryStore {
         picked.is_winner = true;
         picked.prize_tier = '1st';
         picked.prize_amount = firstPrize;
+        picked.payout_status = 'pending';
         winningTicketNumbers.first.push(picked.ticket_number);
         newWinners.push({
           id: `win-${Date.now()}-1`,
@@ -570,6 +632,7 @@ export class LotteryStore {
           user_id: picked.user_id,
           prize_tier: '1st',
           prize_amount: firstPrize,
+          payout_status: 'pending',
           masked_phone: maskPhone(picked.buyer_phone || '0171200000'),
           masked_email: 'wi***@bignosib.com',
           full_name: picked.buyer_name || 'Champion Player',
@@ -582,19 +645,27 @@ export class LotteryStore {
     for (let i = 0; i < 2; i++) {
       const manualNum = manualTicketNumbers?.second?.[i];
       if (manualNum) {
+        const tkt = allTickets.find(t => t.ticket_number === manualNum);
+        if (tkt) {
+          tkt.is_winner = true;
+          tkt.prize_tier = '2nd';
+          tkt.prize_amount = secondPrizeEach;
+          tkt.payout_status = 'pending';
+        }
         winningTicketNumbers.second.push(manualNum);
         newWinners.push({
           id: `win-${Date.now()}-2-${i}`,
           draw_id: currentDraw.id,
           draw_number: currentDraw.draw_number,
-          ticket_id: `man-2-${i}`,
+          ticket_id: tkt ? tkt.id : `man-2-${i}`,
           ticket_number: manualNum,
-          user_id: 'manual',
+          user_id: tkt ? tkt.user_id : 'manual',
           prize_tier: '2nd',
           prize_amount: secondPrizeEach,
+          payout_status: 'pending',
           masked_phone: '01819*****',
           masked_email: 'wi***@bignosib.com',
-          full_name: 'Silver Winner',
+          full_name: tkt?.buyer_name || 'Silver Winner',
           announced_at: new Date().toISOString(),
         });
       } else {
@@ -603,6 +674,7 @@ export class LotteryStore {
           picked.is_winner = true;
           picked.prize_tier = '2nd';
           picked.prize_amount = secondPrizeEach;
+          picked.payout_status = 'pending';
           winningTicketNumbers.second.push(picked.ticket_number);
           newWinners.push({
             id: `win-${Date.now()}-2-${i}`,
@@ -613,6 +685,7 @@ export class LotteryStore {
             user_id: picked.user_id,
             prize_tier: '2nd',
             prize_amount: secondPrizeEach,
+            payout_status: 'pending',
             masked_phone: maskPhone(picked.buyer_phone || '0181900000'),
             masked_email: 'wi***@bignosib.com',
             full_name: picked.buyer_name || 'Lucky Participant',
@@ -626,19 +699,27 @@ export class LotteryStore {
     for (let i = 0; i < 5; i++) {
       const manualNum = manualTicketNumbers?.third?.[i];
       if (manualNum) {
+        const tkt = allTickets.find(t => t.ticket_number === manualNum);
+        if (tkt) {
+          tkt.is_winner = true;
+          tkt.prize_tier = '3rd';
+          tkt.prize_amount = thirdPrizeEach;
+          tkt.payout_status = 'pending';
+        }
         winningTicketNumbers.third.push(manualNum);
         newWinners.push({
           id: `win-${Date.now()}-3-${i}`,
           draw_id: currentDraw.id,
           draw_number: currentDraw.draw_number,
-          ticket_id: `man-3-${i}`,
+          ticket_id: tkt ? tkt.id : `man-3-${i}`,
           ticket_number: manualNum,
-          user_id: 'manual',
+          user_id: tkt ? tkt.user_id : 'manual',
           prize_tier: '3rd',
           prize_amount: thirdPrizeEach,
+          payout_status: 'pending',
           masked_phone: '01911*****',
           masked_email: 'wi***@bignosib.com',
-          full_name: 'Bronze Winner',
+          full_name: tkt?.buyer_name || 'Bronze Winner',
           announced_at: new Date().toISOString(),
         });
       } else {
@@ -647,6 +728,7 @@ export class LotteryStore {
           picked.is_winner = true;
           picked.prize_tier = '3rd';
           picked.prize_amount = thirdPrizeEach;
+          picked.payout_status = 'pending';
           winningTicketNumbers.third.push(picked.ticket_number);
           newWinners.push({
             id: `win-${Date.now()}-3-${i}`,
@@ -657,6 +739,7 @@ export class LotteryStore {
             user_id: picked.user_id,
             prize_tier: '3rd',
             prize_amount: thirdPrizeEach,
+            payout_status: 'pending',
             masked_phone: maskPhone(picked.buyer_phone || '0191100000'),
             masked_email: 'wi***@bignosib.com',
             full_name: picked.buyer_name || 'Bronze Participant',

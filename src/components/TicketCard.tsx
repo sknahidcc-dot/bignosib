@@ -256,27 +256,47 @@ export const TicketCard: React.FC<TicketCardProps> = ({
     }
   };
 
+  const isExpired = ticket.status === 'expired';
+
   return (
-    <div className="space-y-3">
+    <div className={`space-y-3 ${isExpired ? 'relative' : ''}`}>
       {/* REALISTIC PHYSICAL LOTTERY TICKET PAPER CONTAINER */}
       <div
         ref={cardRef}
-        className="relative bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-300 transition-all hover:shadow-amber-500/10 group select-none"
+        className={`relative bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl transition-all group select-none ${
+          isExpired
+            ? 'border-2 border-rose-500/80 bg-rose-50/40 filter blur-[0.45px] opacity-85 hover:opacity-100 hover:filter-none'
+            : 'border border-slate-300 hover:shadow-amber-500/10'
+        }`}
         style={{
-          boxShadow: '0 12px 30px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+          boxShadow: isExpired
+            ? '0 8px 25px -4px rgba(225, 29, 72, 0.25), 0 4px 10px -4px rgba(225, 29, 72, 0.2)'
+            : '0 12px 30px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
         }}
       >
+        {isExpired && (
+          <div className="absolute top-2 right-2 sm:right-20 z-20 pointer-events-none">
+            <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-black text-[10px] tracking-wider uppercase shadow-md border border-rose-700/50 flex items-center gap-1">
+              Expired (মেয়াদ শেষ)
+            </span>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row items-stretch">
           {/* Main Paper Slip (Left & Center) */}
-          <div className="flex-1 p-5 sm:p-6 bg-white relative overflow-hidden flex flex-col justify-between space-y-4">
+          <div className={`flex-1 p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between space-y-4 ${isExpired ? 'bg-rose-50/30' : 'bg-white'}`}>
             {/* Subtle paper watermark texture */}
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px]" />
 
             {/* Top Row: Ribbon & Serial */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              {/* Pink Header Banner like in reference */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-pink-100/90 text-pink-700 font-bold text-xs sm:text-sm font-display tracking-tight border border-pink-200">
-                <Sparkles className="w-3.5 h-3.5 text-pink-600" />
+              {/* Header Banner */}
+              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded font-bold text-xs sm:text-sm font-display tracking-tight border ${
+                isExpired
+                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                  : 'bg-pink-100/90 text-pink-700 border-pink-200'
+              }`}>
+                <Sparkles className={`w-3.5 h-3.5 ${isExpired ? 'text-rose-600' : 'text-pink-600'}`} />
                 <span>BIGNOSIB OFFICIAL LOTTERY</span>
               </div>
 
@@ -368,18 +388,29 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               </div>
 
               {ticket.is_winner ? (
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 text-xs flex items-center gap-1 animate-pulse">
-                  <Trophy className="w-3.5 h-3.5 text-emerald-600" />
-                  Winner: {ticket.prize_tier} Prize (৳{ticket.prize_amount.toLocaleString()})
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 text-xs flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5 text-emerald-600" />
+                    Winner: {ticket.prize_tier} Prize (৳{ticket.prize_amount.toLocaleString()})
+                  </span>
+                  {ticket.payout_status === 'paid' ? (
+                    <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-300 text-[10px]">
+                      Paid (পরিশোধিত)
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300 text-[10px] animate-pulse">
+                      Payout Pending
+                    </span>
+                  )}
+                </div>
               ) : ticket.status === 'valid' ? (
                 <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200 text-[11px] flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                   Active In Draw #{drawNumber}
                 </span>
               ) : (
-                <span className="text-[11px] text-slate-400">
-                  Expired / Archived
+                <span className="text-[11px] text-rose-500 font-medium">
+                  Draw Ended · Not a Winner
                 </span>
               )}
             </div>

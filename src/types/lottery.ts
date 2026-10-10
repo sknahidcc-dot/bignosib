@@ -82,6 +82,9 @@ export interface Ticket {
   is_winner: boolean;
   prize_tier?: PrizeTier | null;
   prize_amount: number;
+  payout_status?: 'pending' | 'paid';
+  paid_at?: string;
+  payout_note?: string;
   status: 'valid' | 'expired';
   created_at: string;
   buyer_name?: string;
@@ -101,5 +104,8 @@ export interface DrawWinner {
   masked_email: string; // e.g. "sk***@gmail.com"
   full_name: string;
   avatar_url?: string;
+  payout_status?: 'pending' | 'paid';
+  paid_at?: string;
+  payout_note?: string;
   announced_at: string;
 }
