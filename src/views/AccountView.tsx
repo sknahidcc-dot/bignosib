@@ -17,8 +17,9 @@ import {
   Check
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Ticket, TicketOrder, UserProfile } from '../types/lottery';
+import { Ticket, TicketOrder, UserProfile, DrawWinner } from '../types/lottery';
 import { AuthService } from '../lib/auth';
+import { LotteryStore } from '../lib/store';
 import { TicketCard } from '../components/TicketCard';
 
 interface AccountViewProps {
@@ -122,8 +123,45 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   // Pending winning tickets that have NOT yet been marked paid by admin
   const pendingWinningTickets = useMemo(() => {
-    return userTickets.filter(t => t.is_winner && t.payout_status !== 'paid');
-  }, [userTickets]);
+    const list = [...userTickets.filter(t => t.is_winner && t.payout_status !== 'paid')];
+    // Also cross-reference with LotteryStore.getWinners() to guarantee winner recognition
+    const allWinners = LotteryStore.getWinners();
+    const userUnpaidWinners = allWinners.filter((w: DrawWinner) => {
+      if (w.payout_status === 'paid') return false;
+      if (w.user_id === currentUser.id) return true;
+      if (userTickets.some(ut => ut.ticket_number === w.ticket_number)) return true;
+      if (currentUser.phone && w.masked_phone) {
+        const cleanUser = currentUser.phone.replace(/\D/g, '');
+        const cleanMask = w.masked_phone.replace(/\D/g, '');
+        if (cleanUser.length >= 5 && cleanMask.length >= 5 && cleanUser.startsWith(cleanMask.slice(0, 5))) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    userUnpaidWinners.forEach((w: DrawWinner) => {
+      if (!list.some(t => t.ticket_number === w.ticket_number)) {
+        list.push({
+          id: w.ticket_id || `win-tkt-${w.id}`,
+          ticket_number: w.ticket_number,
+          order_id: '',
+          user_id: currentUser.id,
+          draw_id: w.draw_id,
+          is_winner: true,
+          prize_tier: w.prize_tier,
+          prize_amount: w.prize_amount,
+          payout_status: 'pending',
+          status: 'expired',
+          created_at: w.announced_at,
+          buyer_name: currentUser.full_name,
+          buyer_phone: currentUser.phone,
+        });
+      }
+    });
+
+    return list;
+  }, [userTickets, currentUser]);
 
   const totalUnpaidPrizeAmount = useMemo(() => {
     return pendingWinningTickets.reduce((sum, t) => sum + (t.prize_amount || 0), 0);

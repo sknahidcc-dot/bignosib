@@ -20,7 +20,10 @@ import {
   Users,
   Gift,
   Check,
-  Search
+  Search,
+  Shuffle,
+  Sparkles,
+  Ticket as TicketIcon
 } from 'lucide-react';
 import { Draw, DrawWinner, SystemSettings, TicketOrder } from '../types/lottery';
 import { AuthService } from '../lib/auth';
@@ -160,6 +163,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
         setDrawFeedback({ type: 'error', message: res.message });
       }
     }, 600);
+  };
+
+  // Approve all pending orders at once
+  const handleApproveAllPending = () => {
+    const res = LotteryStore.approveAllPendingOrders();
+    if (res.success) {
+      setDrawFeedback({
+        type: 'success',
+        message: `Successfully approved ${res.count} pending order(s) and generated ${res.ticketsCreated} ticket(s) for the draw pool!`,
+      });
+      onRefreshData();
+    }
   };
 
   // Handle Mark Winner Paid
@@ -544,122 +559,257 @@ export const AdminView: React.FC<AdminViewProps> = ({
       )}
 
       {/* 2. DRAW EXECUTION TAB */}
-      {activeTab === 'draw' && (
-        <div className="space-y-6">
-          {drawFeedback && (
-            <div
-              className={`p-4 rounded-xl text-xs flex items-center gap-2 ${
-                drawFeedback.type === 'success'
-                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                  : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
-              }`}
-            >
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{drawFeedback.message}</span>
-            </div>
-          )}
+      {activeTab === 'draw' && (() => {
+        const allStoredTickets = LotteryStore.getTickets();
+        const activeTicketsInPool = allStoredTickets.filter(
+          (t) =>
+            t.status === 'valid' &&
+            (t.draw_id === currentDraw.id ||
+              t.draw_id === String(currentDraw.draw_number) ||
+              t.draw_id === `draw-${currentDraw.draw_number}` ||
+              !t.draw_id)
+        );
+        const displayPool = currentDraw.total_pool_amount >= 5000 ? currentDraw.total_pool_amount : 71000;
+        const firstPrizePreview = Math.round(displayPool * 0.15);
+        const secondPrizePreview = Math.round((displayPool * 0.15) / 2);
+        const thirdPrizePreview = Math.round((displayPool * 0.20) / 5);
 
-          {/* Active Draw Stats */}
-          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <div className="text-[11px] text-slate-500 uppercase">Active Draw</div>
-              <div className="text-lg font-bold text-white mt-1">#{currentDraw.draw_number}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-500 uppercase">Approved Tickets</div>
-              <div className="text-lg font-black text-emerald-400 font-mono mt-1">
-                {currentDraw.total_tickets_sold}
+        return (
+          <div className="space-y-6">
+            {/* Pending Orders Warning & Quick Approval */}
+            {pendingCount > 0 && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+                <div className="flex items-start gap-3 text-xs text-amber-200">
+                  <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-amber-300 text-sm">
+                      {pendingCount} টি টিকিট অর্ডার অপেক্ষারত রয়েছে (Pending Verification)
+                    </div>
+                    <p className="text-slate-300 text-[11px] mt-0.5">
+                      ইউজারদের ক্রয়কৃত টিকিট ড্র পুলে অন্তর্ভুক্ত করতে ড্র চালানোর আগেই অনুমোদন (Approve) করে নিন।
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleApproveAllPending}
+                  disabled={drawExecuteLoading}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>সব অনুমোদন করুন ({pendingCount})</span>
+                </button>
+              </div>
+            )}
+
+            {/* Execution Feedback Toast */}
+            {drawFeedback && (
+              <div
+                className={`p-4 rounded-xl text-xs flex items-center gap-2.5 shadow-md ${
+                  drawFeedback.type === 'success'
+                    ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-500/15 border border-rose-500/40 text-rose-300'
+                }`}
+              >
+                {drawFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                )}
+                <span className="font-medium text-xs sm:text-sm">{drawFeedback.message}</span>
+              </div>
+            )}
+
+            {/* Active Draw Stats */}
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Active Draw</div>
+                <div className="text-xl font-black text-white mt-1 font-display">#{currentDraw.draw_number}</div>
+                <span className="text-[10px] text-emerald-400 uppercase font-mono">Status: Live</span>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Pool Valid Tickets</div>
+                <div className="text-xl font-black text-emerald-400 font-mono mt-1">
+                  {Math.max(currentDraw.total_tickets_sold, activeTicketsInPool.length)}
+                </div>
+                <span className="text-[10px] text-slate-400">
+                  {activeTicketsInPool.length > 0 ? `${activeTicketsInPool.length} active in storage` : 'Simulated pool ready'}
+                </span>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Total Prize Pool</div>
+                <div className="text-xl font-black text-amber-400 font-mono mt-1">
+                  ৳{displayPool.toLocaleString()}
+                </div>
+                <span className="text-[10px] text-slate-400">Guaranteed min: ৳71,000</span>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Scheduled Date</div>
+                <div className="text-xs font-mono text-slate-300 mt-2 truncate">
+                  {new Date(currentDraw.draw_date).toLocaleDateString()} {new Date(currentDraw.draw_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-[11px] text-slate-500 uppercase">Total Pool Collected</div>
-              <div className="text-lg font-black text-amber-400 font-mono mt-1">
-                ৳{currentDraw.total_pool_amount.toLocaleString()}
+
+            {/* Draw Execution Modes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Mode A: Cryptographic Random Winner Draw */}
+              <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 border border-amber-500/30 space-y-5 flex flex-col justify-between shadow-xl">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-amber-400 text-sm font-bold">
+                    <Shuffle className="w-5 h-5" />
+                    <span>Mode 1: Cryptographic Random Draw</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    সিস্টেম স্বয়ংক্রিয়ভাবে অনুমোদিত সক্রিয় টিকিটের মধ্য থেকে র্যান্ডম এলগরিদম দিয়ে ১ম পুরষ্কার (১৫%), ২য় পুরষ্কার (১৫% ভাগ) এবং ৩য় পুরষ্কার (২০% ভাগ) নির্বাচন করে ড্র সম্পন্ন করবে।
+                  </p>
+                  <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-slate-300 font-mono space-y-1.5 shadow-inner">
+                    <div className="flex justify-between items-center text-amber-400">
+                      <span>• ১ম পুরষ্কার (১ জন):</span>
+                      <strong className="font-bold">৳{firstPrizePreview.toLocaleString()}</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span>• ২য় পুরষ্কার (২ জন):</span>
+                      <strong className="font-bold">৳{secondPrizePreview.toLocaleString()} প্রতিটি</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span>• ৩য় পুরষ্কার (৫ জন):</span>
+                      <strong className="font-bold">৳{thirdPrizePreview.toLocaleString()} প্রতিটি</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={drawExecuteLoading}
+                  onClick={() => handleExecuteDraw('random')}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-emerald-400 to-amber-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {drawExecuteLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>ড্র পরিচালনা হচ্ছে ও ফলাফল প্রস্তুত করা হচ্ছে...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 fill-current" />
+                      <span>র্যান্ডম ড্র সম্পন্ন করুন (Execute Random Draw)</span>
+                    </>
+                  )}
+                </button>
               </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-500 uppercase">Scheduled Date</div>
-              <div className="text-xs font-mono text-slate-300 mt-2">
-                {new Date(currentDraw.draw_date).toLocaleString()}
+
+              {/* Mode B: Manual Winner Selection / Test Win */}
+              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-5 flex flex-col justify-between shadow-xl">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-200 text-sm font-bold">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                    <span>Mode 2: Manual Winner Selection (টেস্ট / নির্দিষ্ট টিকিট)</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    নির্দিষ্ট কোনো টিকিট নম্বরকে উইনার হিসেবে ঘোষণা করতে চাইলে এখানে ইনপুট দিন। কোনো ঘর খালি রাখলে সিস্টেম স্বয়ংক্রিয়ভাবে পুল থেকে টিকিট বাছাই করবে।
+                  </p>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[11px] font-semibold text-amber-400 block mb-1">
+                        ১ম পুরষ্কার টিকিট (1st Prize Ticket):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BN-2026-948102"
+                        value={manualFirst}
+                        onChange={(e) => setManualFirst(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs uppercase focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-300 block mb-1">
+                        ২য় পুরষ্কার টিকিট (2nd Prize - কমা দিয়ে ২টি পর্যন্ত):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BN-2026-831094, BN-2026-720194"
+                        value={manualSecond}
+                        onChange={(e) => setManualSecond(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs uppercase focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-300 block mb-1">
+                        ৩য় পুরষ্কার টিকিট (3rd Prize - কমা দিয়ে ৫টি পর্যন্ত):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BN-2026-519208, BN-2026-612940"
+                        value={manualThird}
+                        onChange={(e) => setManualThird(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs uppercase focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Pick from Active User Tickets */}
+                  {activeTicketsInPool.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800">
+                      <div className="text-[11px] text-slate-400 mb-2 font-semibold flex items-center justify-between">
+                        <span>সক্রিয় ইউজার টিকিট থেকে কুইক সিলেক্ট:</span>
+                        <span className="text-emerald-400">{activeTicketsInPool.length} Available</span>
+                      </div>
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                        {activeTicketsInPool.slice(0, 6).map((t) => (
+                          <div
+                            key={t.id}
+                            className="p-2 rounded-lg bg-slate-950 border border-slate-800/80 flex items-center justify-between text-[11px]"
+                          >
+                            <div className="truncate mr-2">
+                              <span className="font-mono font-bold text-amber-400">{t.ticket_number}</span>
+                              <span className="text-slate-400 ml-1.5">({t.buyer_name || 'User'})</span>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setManualFirst(t.ticket_number)}
+                                className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-bold"
+                              >
+                                ১ম
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setManualSecond((prev) => (prev ? `${prev}, ${t.ticket_number}` : t.ticket_number));
+                                }}
+                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px]"
+                              >
+                                ২য়
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={drawExecuteLoading}
+                  onClick={() => handleExecuteDraw('manual')}
+                  className="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider border border-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md active:scale-95"
+                >
+                  <Save className="w-4 h-4 text-amber-400" />
+                  <span>
+                    {drawExecuteLoading
+                      ? 'পাবলিশ হচ্ছে...'
+                      : manualFirst.trim()
+                      ? `১ম পুরষ্কার হিসেবে [${manualFirst.trim()}] দিয়ে ড্র সম্পন্ন করুন`
+                      : 'ম্যানুয়াল / অটো উইনার পাবলিশ করুন'}
+                  </span>
+                </button>
               </div>
             </div>
           </div>
-
-          {/* Draw Execution Modes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Mode A: Cryptographic Random Winner Draw */}
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 space-y-4">
-              <div className="flex items-center gap-2 text-amber-400 text-sm font-bold">
-                <Shuffle className="w-4 h-4" />
-                <span>Mode 1: Cryptographic Random Draw</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Uses pseudo-random selection to choose 1 ticket for 1st Prize (15%), 2 tickets for 2nd Prize (15% split), and 5 tickets for 3rd Prize (20% split) from the pool of approved active tickets.
-              </p>
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 font-mono space-y-1">
-                <div>• 1st Prize: ৳{Math.round(currentDraw.total_pool_amount * 0.15).toLocaleString()}</div>
-                <div>• 2nd Prize: ৳{Math.round(currentDraw.total_pool_amount * 0.15 / 2).toLocaleString()} each (2 winners)</div>
-                <div>• 3rd Prize: ৳{Math.round(currentDraw.total_pool_amount * 0.20 / 5).toLocaleString()} each (5 winners)</div>
-              </div>
-
-              <button
-                type="button"
-                disabled={drawExecuteLoading || currentDraw.total_tickets_sold === 0}
-                onClick={() => handleExecuteDraw('random')}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                <span>{drawExecuteLoading ? 'Executing Draw...' : 'Execute Random Draw & Finalize'}</span>
-              </button>
-            </div>
-
-            {/* Mode B: Manual Winner Selection */}
-            <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-              <div className="flex items-center gap-2 text-slate-200 text-sm font-bold">
-                <Trophy className="w-4 h-4 text-amber-400" />
-                <span>Mode 2: Manual Ticket Override</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Optionally specify exact ticket numbers for each winning tier. Useful for test simulations or ceremonial drawings.
-              </p>
-
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  placeholder="1st Prize Ticket (e.g. BN-2026-948102)"
-                  value={manualFirst}
-                  onChange={(e) => setManualFirst(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs uppercase"
-                />
-                <input
-                  type="text"
-                  placeholder="2nd Prize Tickets (comma separated, up to 2)"
-                  value={manualSecond}
-                  onChange={(e) => setManualSecond(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs uppercase"
-                />
-                <input
-                  type="text"
-                  placeholder="3rd Prize Tickets (comma separated, up to 5)"
-                  value={manualThird}
-                  onChange={(e) => setManualThird(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs uppercase"
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={drawExecuteLoading || !manualFirst.trim()}
-                onClick={() => handleExecuteDraw('manual')}
-                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider border border-slate-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                <span>Publish Manual Winners</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2.5 PRIZE PAYOUTS TAB */}
       {activeTab === 'payouts' && (
